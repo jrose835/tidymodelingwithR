@@ -1,0 +1,150 @@
+---
+title: "chapter_4.Rmd"
+author: "Jrose"
+date: '2022-04-02'
+output: html_document
+---
+
+# Chapter 4
+
+Here I am diving into the AMES housing data using R for the first time!
+
+```{r}
+library(modeldata) # This is also loaded by the tidymodels package
+data(ames)
+
+# or, in one line:
+data(ames, package = "modeldata")
+
+dim(ames)
+#> [1] 2930   74
+```
+
+### Exploring important features
+
+Outcome we want to predict
+
+```{r}
+library(tidymodels)
+tidymodels_prefer()
+
+ggplot(ames, aes(x = Sale_Price)) + 
+  geom_histogram(bins = 50, col= "white")
+
+```
+
+Since this feature is so heavily skewed towards the higher end the authors recommend log transforming for two reasons:
+
+-   No chance of predicting a negative price for a house
+
+-   Variance stabilization
+
+```{r}
+ggplot(ames, aes(x = Sale_Price)) + 
+  geom_histogram(bins = 50, col= "white") +
+  scale_x_log10()
+```
+
+```{r}
+ames <- ames %>% mutate(Sale_Price = log10(Sale_Price))
+```
+
+Let's look closer at the other features here:
+
+```{r}
+str(ames)
+```
+
+# Chapter 5
+
+Spending our data
+
+-   When data is plentiful it is wise to "allocate specific subsets of data for different tasks" (i.e. model parameter estimation)
+
+### 5.1 Splitting data
+
+Training and Test sets
+
+Training:
+
+-   Usually the majority of data
+
+-   Sandbox for model building
+
+Test:
+
+-   Held in reserve until 1-2 models are chosen
+
+-   Final arbiter to determine efficacy of the model
+
+#### Random sampling
+
+Use `rsample::intial_split()`.
+
+Takes a dataframe as input, plus proportion of groups
+
+```{r}
+library(tidymodels)
+tidymodels_prefer()
+
+# Set the random number stream using `set.seed()` so that the results can be 
+# reproduced later. 
+set.seed(501)
+
+# Save the split information for an 80/20 split of the data
+ames_split <- initial_split(ames, prop = 0.80)
+ames_split
+#> <Analysis/Assess/Total>
+#> <2344/586/2930>
+```
+
+Data printed shows:
+
+#Data points in training/#Data points in test/Size of original pool
+
+Initial split only gives the locations of splits. Need to use the following to create actual subsets of data as data frames.
+
+```{r}
+ames_train <- training(ames_split)
+ames_test  <-  testing(ames_split)
+
+dim(ames_train)
+```
+
+##### Stratified Random Sampling
+
+Better when there is an imbalance of classification in data
+
+Split of data is conducted separately within each class
+
+Sometimes you may want to stratify based on quartiles of the predicted variable.
+
+Use the strata parameter in the initial_split function to do this
+
+**Only a single column can be used this way**
+
+```{r}
+set.seed(502)
+ames_split <- initial_split(ames, prop = 0.80, strata = Sale_Price)
+ames_train <- training(ames_split)
+ames_test  <-  testing(ames_split)
+
+dim(ames_train)
+
+```
+
+When is random sampling not the best?
+
+-   When data has a time component (i.e. time series)
+
+    -   Instead use most recent data as test
+
+    -   Use `initial_time_split()`
+
+### 5.2 Validation Set
+
+Another subset of the data used to test model during parameter estimation.
+
+You can take this from either the training or test subsets
+
+### 5.3 Multi-level data
