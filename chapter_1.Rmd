@@ -1,0 +1,70 @@
+---
+title: "Chapter_1"
+author: "Jrose"
+date: '2022-03-13'
+output: html_document
+---
+
+This is the start of my notes as I work my way through Tidy Modeling with R. There will be some code to try out, but most of this is likely to just be text-based notes for reference later.
+
+## Introduction
+
+-   Software should make it easy for users to *do the right thing*
+
+## 1.1 Types of Models
+
+### Descriptive models
+
+Describe data
+
+-   Probe level models in microarrays
+
+-   Locally estimated scatterplot smoothing (LOESS)
+
+    -   Flexible regression model fitted to data using usally one independent variable
+
+### Inferential Models
+
+Goal is to produce a decision for a research question, or test a specific hypothesis
+
+-   Generally produce a test statistic (p-value), confidence interval, or posterior probability
+
+### Predictive Models
+
+Predict things
+
+-   Looking for an estimation, not inference, or the most accurate prediction possible
+
+#### Mechanistic Model
+
+-   System of differential equations (DEq)
+
+-   Data is used to determine unknown parameters of DEq
+
+-   Also use other underlying assumptions
+
+#### Empirically driven model
+
+-   Created with more vague assumptions
+
+-   ML
+
+## 1.2 Terminology
+
+-   Unsupervised models
+    -   Model that learns patterns, clusters, or characteristics of data but lack an outcome (i.e. dependent variable).
+    -   PCA, clustering, autoencoders
+-   Supervised models
+    -   Model that have an outcome (dependent variable)
+
+    -   *Regression* predicts a numeric outcome
+
+    -   *Classification* predicts an outcome that is an ordered or unordered set of qualitative values
+
+## 1.5 How does modeling fit into data analysis
+
+-   Exploratory data analysis (EDA)
+-   Use EDA for feature engineering
+-   Model tuning and selection
+    -   Create a variety of models and compare performance
+-   Model evaluation
