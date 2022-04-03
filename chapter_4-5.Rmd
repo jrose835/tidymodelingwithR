@@ -148,3 +148,13 @@ Another subset of the data used to test model during parameter estimation.
 You can take this from either the training or test subsets
 
 ### 5.3 Multi-level data
+
+You need to think about what the "independent experimental unit" is in your data set. Here it is pretty clear that each house could be considered independent, however it becomes more difficult when you start dealing with time series or multiple samples from the same source (i.e. cell types from one individual)
+
+**You need to make sure you split your data *at the level* of experimental units**
+
+### 5.4 Other considerations
+
+**Information leakage** is when data outside of the training set are used in the modeling process
+
+**Keep the test set quarantined**
