@@ -1,0 +1,186 @@
+---
+title: "Chapter_6"
+author: "Jrose"
+date: '2022-04-03'
+output: html_document
+---
+
+# Chapter 6: Fitting Models with parsnip
+
+Getting used to the parsnip package from within tidymodels
+
+### 6.1 Create a model
+
+Some thoughts on linear regression models first:
+
+-   Ordinary linear regression used least squares to solve for paremeters
+
+    -   You would use `lm(formula, data, ...)`
+
+-   Regularized linear regression adds penalty to least squares to encourage simplicity by removing predictors or shrinking coeffcients
+
+    -   For bayesian: Use `stan_glm(formula, data, family = "gaussian", …)`
+
+    -   For non-Bayesian: Use `glmnet(x=matrix, y=vector, family = "gaussian", …)`
+
+Each has a different syntax for parameters and inputs
+
+The niche of tidymodels is to unify approaches by asking you to:
+
+1.  Specify the type of model (i.e. linear regression, random forest, etc)
+2.  Specify the engine for fitting (i.e. what package is used...glmnet, etc)
+3.  When required, specify the mode (is the outcome numeric, categorical, etc)
+
+```{r}
+library(tidymodels)
+tidymodels_prefer()
+
+linear_reg() %>% set_engine("lm")
+
+linear_reg() %>% set_engine("glmnet") 
+
+linear_reg() %>% set_engine("stan")
+```
+
+> "The parsnip package allows the user to be indifferent to the interface of the underlying model"
+
+`translate()` shows how the data is fit into the underlying functions of models
+
+```{r}
+linear_reg() %>% set_engine("lm") %>% translate()
+```
+
+Back to the ames data
+
+From before:
+
+```{r}
+library(tidymodels)
+data(ames)
+ames <- ames %>% mutate(Sale_Price = log10(Sale_Price))
+
+set.seed(502)
+ames_split <- initial_split(ames, prop = 0.80, strata = Sale_Price)
+ames_train <- training(ames_split)
+ames_test  <-  testing(ames_split)
+```
+
+Fitting a model:
+
+```{r}
+lm_model <- 
+  linear_reg() %>% 
+  set_engine("lm")
+
+lm_form_fit <- 
+  lm_model %>% 
+  # Recall that Sale_Price has been pre-logged
+  fit(Sale_Price ~ Longitude + Latitude, data = ames_train)
+
+lm_xy_fit <- 
+  lm_model %>% 
+  fit_xy(
+    x = ames_train %>% select(Longitude, Latitude),
+    y = ames_train %>% pull(Sale_Price)
+  )
+
+lm_form_fit
+lm_xy_fit
+```
+
+You can set arguments either at the main level, the engine level, or at the mode. Each is more specific than the last to particular packages.
+
+```{r}
+rand_forest(trees = 1000, min_n = 5) %>% 
+  set_engine("ranger") %>% 
+  set_mode("regression") %>% 
+  translate()
+```
+
+### 6.2 Use the model results
+
+Parsnip model objects store model outputs
+
+Get to them via `extract_fit_engine()`
+
+```{r}
+lm_form_fit %>% extract_fit_engine()
+```
+
+This is a list lm object right?
+
+```{r}
+lm_form_fit %>% extract_fit_engine() %>% summary()
+```
+
+```{r}
+model_res <- 
+  lm_form_fit %>% 
+  extract_fit_engine() %>% 
+  summary()
+
+# The model coefficient table is accessible via the `coef` method.
+param_est <- coef(model_res)
+class(param_est)
+param_est
+```
+
+Use the `broom::tidy()` function to get the same output in a standardized data frame output
+
+```{r}
+tidy(lm_form_fit)
+```
+
+### 6.3 Making predictions
+
+Things to know about `predict()`
+
+-   The results are always a tibble
+
+-   Column names of the tibble are always predictable
+
+-   As many rows in the tibble as there are in the input data set
+
+```{r}
+ames_test_small <- ames_test %>% slice(1:5)
+predict(lm_form_fit, new_data = ames_test_small)
+```
+
+```{r}
+ames_test_small %>% 
+  select(Sale_Price) %>% 
+  bind_cols(predict(lm_form_fit, ames_test_small)) %>% 
+  # Add 95% prediction intervals to the results:
+  bind_cols(predict(lm_form_fit, ames_test_small, type = "pred_int")) 
+```
+
+Sometimes the names start with a "." to avoid conflicts with other variables
+
+Specify the type parameter to generate things like:
+
+-   numeric
+
+-   class
+
+-   prob
+
+-   conf_int
+
+-   pred_int
+
+```{r}
+library(tidymodels)
+data(ames)
+ames <- mutate(ames, Sale_Price = log10(Sale_Price))
+
+set.seed(123)
+ames_split <- initial_split(ames, prop = 0.80, strata = Sale_Price)
+ames_train <- training(ames_split)
+ames_test  <-  testing(ames_split)
+
+lm_model <- linear_reg() %>% set_engine("lm")
+```
+
+### 6.4 Parsnip-adjacent packages
+
+A list of all the models tha tcan be used with parsnip can be found at: <https://www.tidymodels.org/find/>
