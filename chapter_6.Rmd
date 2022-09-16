@@ -183,4 +183,4 @@ lm_model <- linear_reg() %>% set_engine("lm")
 
 ### 6.4 Parsnip-adjacent packages
 
-A list of all the models tha tcan be used with parsnip can be found at: <https://www.tidymodels.org/find/>
+A list of all the models that can be used with parsnip can be found at: <https://www.tidymodels.org/find/>
