@@ -1,0 +1,113 @@
+---
+title: "chapter_8"
+author: "Jrose"
+date: '2022-09-16'
+output: html_document
+---
+
+# Chapter 8: Feature Engineering with recipes
+
+Feature engineering involves reformatting predictors to make them easier for a model to use effectively
+
+You also may need to reformat in order to use a certain model. An appendix table of preprocessing required for different model types can be found here [<https://www.tmwr.org/pre-proc-table.html#pre-proc-table>]
+
+### 8.1 A simple recipe() for the AMES housing data
+
+AMES data setup from section 7.7
+
+```{r}
+library(tidymodels)
+tidymodels_prefer()
+
+data(ames)
+
+ames <- mutate(ames, Sale_Price = log10(Sale_Price))
+
+set.seed(502)
+ames_split <- initial_split(ames, prop = 0.80, strata = Sale_Price)
+ames_train <- training(ames_split)
+ames_test  <-  testing(ames_split) # Includes the recipes package
+
+lm_model <- 
+  linear_reg() %>% 
+  set_engine("lm")
+
+lm_wflow <- 
+  workflow() %>% 
+  add_model(lm_model) %>%
+  add_formula(Sale_Price ~ Longitude + Latitude)   %>%
+  remove_formula() %>% 
+  add_variables(outcome = Sale_Price, predictors = c(Longitude, Latitude))
+
+```
+
+Use of recipe
+
+```{r}
+simple_ames <- 
+  recipe(Sale_Price ~ Neighborhood + Gr_Liv_Area + Year_Built + Bldg_Type,
+         data = ames_train) %>%
+  step_log(Gr_Liv_Area, base = 10) %>% 
+  step_dummy(all_nominal_predictors())
+simple_ames
+```
+
+In `recipe()` you can define a formula and the dataset
+
+The rest of the feature engineering is done using "step_" functions
+
+step_log() converts Gr_Liv_Area to log
+
+step_dummy() converts qualitative data to a quantitative format (i.e. encodes 1 or 0s)
+
+all_nominal_predictors() recognizes and captures the names of any predictor column that is currently a factor or character (tidy_select-like function)
+
+Also available:
+
+* all_numeric_predictors()
+* all_numeric()
+* all_predictors()
+* all_outcomes()
+
+Advantages of using recipes/steps:
+
+* Recycling across models
+* Recipes have more options for preprocessing vs add_formula
+* Tidy_select variable selection
+* All data processing in a single R object
+
+### 8.2 Using Recipes
+
+Let's add this to a workflow like in chapter 7
+
+```{r}
+lm_wflow <- 
+  lm_wflow %>% 
+  remove_variables() %>% 
+  #^Need to remove variables added earlier (chap 7) before adding new recipe
+  add_recipe(simple_ames)
+lm_wflow
+```
+
+```{r}
+lm_fit <- fit(lm_wflow, ames_train)
+predict(lm_fit, ames_test %>% slice(1:3))
+```
+
+
+```{r}
+lm_fit %>% 
+  extract_recipe(estimated = TRUE)
+
+# To tidy the model fit: 
+lm_fit %>% 
+  # This returns the parsnip object:
+  extract_fit_parsnip() %>% 
+  # Now tidy the linear model object:
+  tidy() %>% 
+  slice(1:5)
+```
+
+## 8.3 How Data are used by the recipe()
+
+
