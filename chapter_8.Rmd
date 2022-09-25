@@ -11,7 +11,7 @@ Feature engineering involves reformatting predictors to make them easier for a m
 
 You also may need to reformat in order to use a certain model. An appendix table of preprocessing required for different model types can be found here [<https://www.tmwr.org/pre-proc-table.html#pre-proc-table>]
 
-### 8.1 A simple recipe() for the AMES housing data
+## 8.1 A simple recipe() for the AMES housing data
 
 AMES data setup from section 7.7
 
@@ -54,29 +54,29 @@ simple_ames
 
 In `recipe()` you can define a formula and the dataset
 
-The rest of the feature engineering is done using "step_" functions
+The rest of the feature engineering is done using "step\_" functions
 
-step_log() converts Gr_Liv_Area to log
+`step_log()` converts Gr_Liv_Area to log
 
-step_dummy() converts qualitative data to a quantitative format (i.e. encodes 1 or 0s)
+`step_dummy()` converts qualitative data to a quantitative format (i.e. encodes 1 or 0s) *aka OneHot encoding*
 
-all_nominal_predictors() recognizes and captures the names of any predictor column that is currently a factor or character (tidy_select-like function)
+`all_nominal_predictors()` recognizes and captures the names of any predictor column that is currently a factor or character (tidy_select-like function)
 
 Also available:
 
-* all_numeric_predictors()
-* all_numeric()
-* all_predictors()
-* all_outcomes()
+-   all_numeric_predictors()
+-   all_numeric()
+-   all_predictors()
+-   all_outcomes()
 
 Advantages of using recipes/steps:
 
-* Recycling across models
-* Recipes have more options for preprocessing vs add_formula
-* Tidy_select variable selection
-* All data processing in a single R object
+-   Recycling across models
+-   Recipes have more options for preprocessing vs add_formula
+-   Tidy_select variable selection
+-   All data processing in a single R object
 
-### 8.2 Using Recipes
+## 8.2 Using Recipes
 
 Let's add this to a workflow like in chapter 7
 
@@ -94,7 +94,6 @@ lm_fit <- fit(lm_wflow, ames_train)
 predict(lm_fit, ames_test %>% slice(1:3))
 ```
 
-
 ```{r}
 lm_fit %>% 
   extract_recipe(estimated = TRUE)
@@ -110,4 +109,308 @@ lm_fit %>%
 
 ## 8.3 How Data are used by the recipe()
 
+When you call `recipe(...,data)` the data set is used to determin the data types of each column.
+
+When you fit a model using `fit(workflow, data)` training data is used
+
+## 8.4 Examples of recipe steps
+
+### 8.4.1 Encoding qualitative data in a numeric format
+
+You can use `step_unknown()` to change missing values to a dedicated factor level
+
+`step_novel()` does something like create a new factor level for future use?? Not really clear.
+
+`step_other()` converts infrequently occuring levels into a bin 'other' level. For example the neighborhood variable in AMES dataset
+
+```{r}
+simple_ames <- 
+  recipe(Sale_Price ~ Neighborhood + Gr_Liv_Area + Year_Built + Bldg_Type,
+         data = ames_train) %>%
+  step_log(Gr_Liv_Area, base = 10) %>% 
+  step_other(Neighborhood, threshold = 0.01) %>% 
+  step_dummy(all_nominal_predictors())
+```
+
+Most models require predictor values to be numerical. Notable exceptions: tree-based models, rule-based models, adn naive Bayes models
+
+Apparently there's an R-specific problem with true *One Hot* encoding. The first column is dropped so it is identified by having all 0s.
+
+You can get around this by using step_dummy()'s one_hot argument.
+
+Traditional dummy variable encodings require that all possible levels are already known at the start (you can't make new one or things don't add up right!)
+
+Other methods don't have this issue: \* feature hashing only consider the value of the category to assign it to a pre-defined pool of dummy variables \* Effect or likelihood encodings replace original data with a single numeric column measuring the effect of those data
+
+### 8.4.2 Interaction Terms
+
+Interaction effects involve two or more predictors and the effect of one is contingent on the other.
+
+Numerically, an interaction between predictors is encoded as their product.
+
+For more background see (Chap 7 of M.Kuhn and Johnson (2020))[<https://bookdown.org/max/FES/detecting-interaction-effects.html>]
+
+In the AMES data we can see that relationship between gross living area with sales prices changes by building type.
+
+```{r}
+ggplot(ames_train, aes(x = Gr_Liv_Area, y = 10^Sale_Price)) + 
+  geom_point(alpha = .2) + 
+  facet_wrap(~ Bldg_Type) + 
+  geom_smooth(method = lm, formula = y ~ x, se = FALSE, color = "lightblue") + 
+  scale_x_log10() + 
+  scale_y_log10() + 
+  labs(x = "Gross Living Area", y = "Sale Price (USD)")
+```
+
+Interactions are encoded using `:` in base R
+
+`Sale_Price ~ Neighborhood + log10(Gr_Liv_Area) + Bldg_Type + log10(Gr_Liv_Area):Bldg_Type`
+
+or
+
+`Sale_Price ~ Neighborhood + log10(Gr_Liv_Area) * Bldg_Type`
+
+Where \* expands those columns to the main effects and interaction terms.
+
+**Tidymodels uses more readable syntax involving the `step_interact(~ interaction terms)` function**
+
+```{r}
+simple_ames <- 
+  recipe(Sale_Price ~ Neighborhood + Gr_Liv_Area + Year_Built + Bldg_Type,
+         data = ames_train) %>%
+  step_log(Gr_Liv_Area, base = 10) %>% 
+  step_other(Neighborhood, threshold = 0.01) %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  # Gr_Liv_Area is on the log scale from a previous step
+  step_interact( ~ Gr_Liv_Area:starts_with("Bldg_Type_") )
+```
+
+Additional interactions can be added with `+` operator
+
+Note that step_interact will automatically generate dummy variables for factors if it had not already been done (using step_dummy)
+
+Column names of interactions from recipe follow the format: "Gr_Liv_Area_x\_Bldg_Type_Duplex" which are valid dataframe names
+
+### 8.4.3 Spline Functions
+
+It is not uncommon to try to use a simple model (like linear model) to approximate a nonlinear relationship between a predictor and outcome.
+
+In this case you add in specific nonlinear features for predictors that may need them (i.e. longitude and latitude in AMES). You can do this using *spline* functions.
+
+Splines replace the exisiting numeric predictor with a set of columns that allow a model to emulate a flexible nonlinear relationship. More spline terms allows for better nonlinear fit **but also increases likelihood of overfitting**
+
+    `geom_smooth()` in ggplot uses a spline!
+
+```{r}
+library(patchwork)
+library(splines)
+
+plot_smoother <- function(deg_free) {
+  ggplot(ames_train, aes(x = Latitude, y = 10^Sale_Price)) + 
+    geom_point(alpha = .2) + 
+    scale_y_log10() +
+    geom_smooth(
+      method = lm,
+      formula = y ~ ns(x, df = deg_free),
+      color = "lightblue",
+      se = FALSE
+    ) +
+    labs(title = paste(deg_free, "Spline Terms"),
+         y = "Sale Price (USD)")
+}
+
+( plot_smoother(2) + plot_smoother(5) ) / ( plot_smoother(20) + plot_smoother(100) )
+```
+
+`ns()` from the splines package generates feature columns using functions called *natural splines*
+
+The number of spline terms can be considered a *tuning parameter* for this model
+
+How to use splines in recipes:
+
+```{r}
+recipe(Sale_Price ~ Neighborhood + Gr_Liv_Area + Year_Built + Bldg_Type + Latitude,
+         data = ames_train) %>%
+  step_log(Gr_Liv_Area, base = 10) %>% 
+  step_other(Neighborhood, threshold = 0.01) %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_interact( ~ Gr_Liv_Area:starts_with("Bldg_Type_") ) %>% 
+  step_ns(Latitude, deg_free = 20)
+```
+
+### 8.4.4 Feature Extraction
+
+Feature extraction is a common method for representing multiple features at once
+
+PCA is one example. One nice thing about PCs is that they are not correlated with each other (by definition), this helps to reduce the correlation between predictors in a model.
+
+In AMES data several features measure size of the property (Total_Bsmt_SF, First_Flr_SF, Gr_Liv_Area, etc). PCA might be an option to represent these potentially redundant variables as a smaller feature set.
+
+    Note that other than Gr_Liv_Area all of these have the "_SF" suffix. Time for tidyselect!
+
+    # Use a regular expression to capture house size predictors: 
+    step_pca(matches("(SF$)|(Gr_Liv)"))
+
+Note that PCA assumes all of the predictors are on the same scale. True here because all are measured in sq feet. **Oftentimes you need to use `step_normalize()` before PCA though!**
+
+Other extraction steps in recipes:
+
+-   Independent component analyssi (ICA)
+-   non-negative matrix factorizatin (NNMF)
+-   Multidimensonal scaling (MDS)
+-   UMAP
+
+### 8.4.5 Row Sampling Steps
+
+You can also use recipes to affect the rows of a dataset as well.
+
+i.e. subsampling for class imbalances
+
+-   Downsampling: Keeps the minority class and takes a random sample of the majority class to balance freqeuencies
+
+-   Upsampling: Repliates samples from minority class to balance the classes
+
+-   Hybrid methods using a combination of both
+
+Function from the themis package:
+
+`step_downsample(outcome_column_name)`
+
+*Note: Only do this on the training dataset. Test data should be kept as is*
+
+Other row-based step functions:
+
+* step_filter()
+* step_sample()
+* step_slice()
+* step_arrange()
+
+Skip argument for all of these functions should be set to true!
+
+### 8.4.6 General Transformations
+
+Many of the above mirror the dplyr functions. There is also:
+
+`step_mutate()` 
+
+which can be used for transformations (like ratios/etc)
+
+### 8.4.7 Natural Language Processing
+
+Something about the textrecipes package??
+
+## 8.5 Skipping Steps for New Data
+
+Operations on the outcome variable should not be done in recipes...usually
+
+Things like downsampling for class imbalance should NOT be done on the test dataset. The "skip=T" parameter makes sure that this step will be ignored by predict()
+
+## 8.6 TIDY A recipe()
+
+Analogous to the tidy() function for statistical objects, there is a tidy() verb for recipes
+
+```{r}
+ames_rec <- 
+  recipe(Sale_Price ~ Neighborhood + Gr_Liv_Area + Year_Built + Bldg_Type + 
+           Latitude + Longitude, data = ames_train) %>%
+  step_log(Gr_Liv_Area, base = 10) %>% 
+  step_other(Neighborhood, threshold = 0.01) %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_interact( ~ Gr_Liv_Area:starts_with("Bldg_Type_") ) %>% 
+  step_ns(Latitude, Longitude, deg_free = 20)
+```
+
+```{r}
+tidy(ames_rec)
+```
+
+You can set the id argument within a step manually (otherwise it gets a random suffix...see id column above)
+
+```{r}
+ames_rec <- 
+  recipe(Sale_Price ~ Neighborhood + Gr_Liv_Area + Year_Built + Bldg_Type + 
+           Latitude + Longitude, data = ames_train) %>%
+  step_log(Gr_Liv_Area, base = 10) %>% 
+  step_other(Neighborhood, threshold = 0.01, id = "my_id") %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_interact( ~ Gr_Liv_Area:starts_with("Bldg_Type_") ) %>% 
+  step_ns(Latitude, Longitude, deg_free = 20)
+
+lm_wflow <- 
+  workflow() %>% 
+  add_model(lm_model) %>% 
+  add_recipe(ames_rec)
+
+lm_fit <- fit(lm_wflow, ames_train)
+```
+
+When you supply the id to tidy() it outputs the results of applying the step corresponding to that id
+
+```{r}
+estimated_recipe <- 
+  lm_fit %>% 
+  extract_recipe(estimated = TRUE)
+
+tidy(estimated_recipe, id = "my_id")
+```
+
+You can also call tidy() with  number of step inputted to do the same thing
+
+```{r}
+tidy(estimated_recipe, number = 2)
+```
+
+## 8.7 Column Roles
+
+When a formula is used with the initial recipe() call it assigns roles to each of the column depending on what side of the `~` they are on (either predictor or outcome).
+
+There are other roles you can specify as well though.
+
+In the AMES dataset there is an address column which might be useful to keep for later on. 
+
+```{r}
+ames_rec %>% update_role(address, new_role = "street address")
+```
+Funny enough I think the address variable has been removed from the AMES data somewhow which is causing an error above.
+
+Role names can be any string.
+
+Columns can have multiple roles (add via add_role)
+
+Step functions have a role argument that assigns roles to the outputted columns of that step. Most defaults are good. 
+
+## 8.8 Chapter Summary
+
+* Learned about recipes for feature engineering and preprocessing
+
+Code for later chapters:
+
+```{r}
+library(tidymodels)
+data(ames)
+ames <- mutate(ames, Sale_Price = log10(Sale_Price))
+
+set.seed(502)
+ames_split <- initial_split(ames, prop = 0.80, strata = Sale_Price)
+ames_train <- training(ames_split)
+ames_test  <-  testing(ames_split)
+
+ames_rec <- 
+  recipe(Sale_Price ~ Neighborhood + Gr_Liv_Area + Year_Built + Bldg_Type + 
+           Latitude + Longitude, data = ames_train) %>%
+  step_log(Gr_Liv_Area, base = 10) %>% 
+  step_other(Neighborhood, threshold = 0.01) %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_interact( ~ Gr_Liv_Area:starts_with("Bldg_Type_") ) %>% 
+  step_ns(Latitude, Longitude, deg_free = 20)
+  
+lm_model <- linear_reg() %>% set_engine("lm")
+
+lm_wflow <- 
+  workflow() %>% 
+  add_model(lm_model) %>% 
+  add_recipe(ames_rec)
+
+lm_fit <- fit(lm_wflow, ames_train)
+```
 
