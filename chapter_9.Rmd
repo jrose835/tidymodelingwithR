@@ -52,7 +52,7 @@ lm_fit <- fit(lm_wflow, ames_train)
 
 ### 9.1 Performance Metrics and Inference
 
-Effetiveness is determined by the ultimate use of a model (inference vs prediction)
+Effectiveness is determined by the ultimate use of a model (inference vs prediction)
 
 This chapter mostly focuses on maximizing predictive strength, however the authors advise those developing inferential models to use the same techniques.
 
@@ -106,3 +106,117 @@ Yardstick doesn't use adjusted R^2 because it is commonly used to evaluate a mod
 
 ### 9.3 Binary Classiication Metrics
 
+Let's look at another example data set
+
+```{r}
+data(two_class_example)
+tibble(two_class_example)
+```
+
+Yardstick functions for class predictions
+
+```{r}
+conf_mat(two_class_example, truth=truth, estimate=predicted)
+```
+
+```{r}
+#Accuracy
+accuracy(two_class_example, truth, predicted)
+
+# Matthews correlation coefficient:
+mcc(two_class_example, truth, predicted)
+
+# F1 metric:
+f_meas(two_class_example, truth, predicted)
+
+# Combining these three classification metrics together
+classification_metrics <- metric_set(accuracy, mcc, f_meas)
+classification_metrics(two_class_example, truth = truth, estimate = predicted)
+
+```
+Be careful to check which level (first or second in binary) is considered the "event" by the metrics used. It varies. 
+
+Tidymodels has roc functions:
+
+`roc_curve()` which calculates the datapoints of the roc curve
+
+and `roc_auc()` which calculates the area under the roc curve.
+
+```{r}
+two_class_curve <- roc_curve(two_class_example, truth, Class1)
+two_class_curve
+
+roc_auc(two_class_example, truth, Class1)
+```
+
+There's even a cool `autoplot()` function, but you can also make a ggplot from the roc_curve() output
+
+```{r}
+autoplot(two_class_curve)
+```
+
+### 9.4 Multiclass Classification Metrics
+
+What about data with more classes??
+
+```{r}
+data(hpc_cv)
+tibble(hpc_cv)
+```
+
+You can use the same discrete calss prediction metrics as above
+
+```{r}
+accuracy(hpc_cv, obs, pred)
+mcc(hpc_cv, obs, pred)
+```
+
+Many of these methods were designed for two classes but can be extended to outcomes with more than two classes.
+
+Wrappers for things like sensitivity exist but need another arugment:
+
+* Macro-average computers one-v-all metric and then averages
+
+* Maco-weighted does the same but the average is weighted by the number of samples in each class
+
+* Micro-averaging computesr the contribution for each class, aggregates them, and then computers a sigle metric from the aggregates.
+
+```{r}
+sensitivity(hpc_cv, obs, pred, estimator = "macro")
+sensitivity(hpc_cv, obs, pred, estimator = "macro_weighted")
+sensitivity(hpc_cv, obs, pred, estimator = "micro")
+
+```
+Muli-class ROC
+
+*Must pass the names of all class probability columns*
+
+```{r}
+roc_auc(hpc_cv, obs, VF, F, M, L)
+roc_auc(hpc_cv, obs, VF, F, M, L, estimator = "macro_weighted")
+```
+
+You can also use dplyr grouping
+
+```{r}
+hpc_cv %>% 
+  group_by(Resample) %>% 
+  accuracy(obs, pred)
+```
+
+```{r}
+hpc_cv %>% 
+  group_by(Resample) %>% 
+  roc_curve(obs, VF, F, M, L) %>% 
+  autoplot()
+```
+
+### 9.5 Chapeter Summary
+
+* Different metrics measure different aspects of model fit
+
+* It is important to measure model performance even when prediction is not your goal
+
+* Yardstick package has lots of functions for metrics
+
+* Different metrics for regression and classification are available
