@@ -112,3 +112,87 @@ Linear model doesn't have as much of an issue regarding this because it is less 
 What should we do? Resampling using methods like cross-validation or validation sets.
 
 ### 10.2 Resampling Methods
+
+Most resampling methods are iterative. They split the training data further into multiple sets of analysis and assessment splits and compare by fitting multiple models on each segment of data.
+
+### 10.2.1 Cross validation
+
+Most common is V-fold cross valiation. Data are randomly partitioned into V sets of roughly equal size (called *folds*). 
+
+For each iteration, one fold is held out for assessment and the remaining folds are used to train the model.
+
+V is often 5 or 10 in practice, 10 is best for most situations. 
+
+```{r}
+set.seed(1001)
+ames_folds <- vfold_cv(ames_train, v = 10)
+ames_folds
+```
+#### Repeated cross-validation
+
+"Depending on data size and other characteristics, the resampling estimate procued by V-fold cross-validation may be excessively noisy"
+
+You can repeat cross-validation to collect more data and reduce this noise
+
+```{r}
+vfold_cv(ames_train, v = 10, repeats = 5)
+```
+#### Leave-one-out cross validation
+
+For n training set samples, n models are fit using n-1 rows of the training set. The n predictions are pooled at the end to produce a single performance statistic.
+
+LOO methods are generally only good for extremely small samples. Not part of tidymodels.
+
+#### Monte carlo cross-validation
+
+Similar to cross-validation but the splits are completely random each time and therefore not mutually exclusive.
+
+```{r}
+mc_cv(ames_train, prop = 9/10, times = 20)
+```
+
+### 10.2.2 Validation Sets
+
+Initial available data is split into training, validation, and test sets.
+
+Often used when original pool of data is VERY LARGE
+
+```{r}
+set.seed(1002)
+val_set <- validation_split(ames_train, prop = 3/4)
+val_set
+```
+
+### 10.2.3 Bootstrapping
+
+Originally designed as a method to approximate sample distributions from unknown distributions.
+
+A bootstrap smaple of the training data is a sample that is the same size as the training data set but is drawn *with replacement* so that some samples can be selected multiple times. 
+
+The assessment set is made up of those samples which were not selected for analysis (also called out-of-bag sample).
+
+```{r}
+bootstraps(ames_train, times = 5)
+```
+
+Bootstrap procedure generates estimates with very **low variance** but often with a significant **pessimistic bias**
+
+
+### 10.2.4 Rolling Forcasting Origin 
+
+Data with a time-component may have *seasonal or temporal trends* which should be reflected in the resampling.
+
+```{r}
+time_slices <- 
+  tibble(x = 1:365) %>% 
+  rolling_origin(initial = 6 * 30, assess = 30, skip = 29, cumulative = FALSE)
+
+data_range <- function(x) {
+  summarize(x, first = min(x), last = max(x))
+}
+
+map_dfr(time_slices$splits, ~   analysis(.x) %>% data_range())
+map_dfr(time_slices$splits, ~ assessment(.x) %>% data_range())
+```
+
+### 10.3 Estimating Performance
